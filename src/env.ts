@@ -4,7 +4,7 @@ const envSchema = z.object({
   NODE_ENV: z
     .enum(['development', 'production', 'test'])
     .default('development'),
-  GEMINI_API_KEY: z.string().min(1, 'Gemini API key is required'),
+  // GEMINI_API_KEY: z.string().min(1, 'Gemini API key is required'),
 });
 
 const _env = envSchema.safeParse(process.env);
