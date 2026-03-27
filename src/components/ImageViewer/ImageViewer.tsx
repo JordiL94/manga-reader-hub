@@ -52,16 +52,23 @@ export default function ImageViewer({
 }: ImageViewerProps) {
   const currentPage = pages[currentIndex];
 
-  const [studyMode, setStudyMode] = useState(false);
+  const [studyMode, setStudyMode] = useState(() =>
+    typeof window !== 'undefined'
+      ? localStorage.getItem('defaultStudyMode') === 'true'
+      : false
+  );
   const [isAutoTranslate, setIsAutoTranslate] = useState(false);
 
-  // We will update this hook in the next step to talk to Dexie!
-  // Hook into our Gemini API pipeline
+  const aiModel =
+    typeof window !== 'undefined'
+      ? localStorage.getItem('geminiModel') || 'gemini-3.1-flash-lite-preview'
+      : 'gemini-3.1-flash-lite-preview';
+
   const { isLoading, refetch } = useTranslatePage(
     currentPage?.id,
     currentPage?.file,
-    !!currentPage?.translations?.length, // Check if we already have data
-    'gemini-3.1-flash-lite-preview',
+    !!currentPage?.translations?.length,
+    aiModel,
     isAutoTranslate
   );
 
