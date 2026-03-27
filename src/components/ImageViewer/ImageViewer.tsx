@@ -6,7 +6,6 @@ import { useTranslatePage } from '@/hooks/useTranslatePage';
 import TranslationOverlay from '@/components/TranslationOverlay';
 import { cn } from '@/utils/cn';
 
-// Natively handles the Blob to Base64 rendering asynchronously, avoiding linter errors
 function BlobImage({
   blob,
   alt,
@@ -52,17 +51,25 @@ export default function ImageViewer({
 }: ImageViewerProps) {
   const currentPage = pages[currentIndex];
 
+  // Linter-safe lazy initialization
   const [studyMode, setStudyMode] = useState(() =>
     typeof window !== 'undefined'
       ? localStorage.getItem('defaultStudyMode') === 'true'
       : false
   );
-  const [isAutoTranslate, setIsAutoTranslate] = useState(false);
 
   const aiModel =
     typeof window !== 'undefined'
       ? localStorage.getItem('geminiModel') || 'gemini-3.1-flash-lite-preview'
       : 'gemini-3.1-flash-lite-preview';
+
+  const [isAutoTranslate, setIsAutoTranslate] = useState(false);
+
+  // --- TOUCH SWIPE LOGIC (No device detection state needed!) ---
+  const [touchStartX, setTouchStartX] = useState<number | null>(null);
+  const [touchStartY, setTouchStartY] = useState<number | null>(null);
+  const [touchEndX, setTouchEndX] = useState<number | null>(null);
+  const [touchEndY, setTouchEndY] = useState<number | null>(null);
 
   const { isLoading, refetch } = useTranslatePage(
     currentPage?.id,
@@ -79,6 +86,33 @@ export default function ImageViewer({
   const goToPrevPage = useCallback(() => {
     if (currentIndex > 0) onIndexChange(currentIndex - 1);
   }, [currentIndex, onIndexChange]);
+
+  // Touch Handlers
+  const onTouchStart = (e: React.TouchEvent) => {
+    setTouchEndX(null);
+    setTouchEndY(null);
+    setTouchStartX(e.targetTouches[0].clientX);
+    setTouchStartY(e.targetTouches[0].clientY);
+  };
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    setTouchEndX(e.targetTouches[0].clientX);
+    setTouchEndY(e.targetTouches[0].clientY);
+  };
+
+  const onTouchEnd = () => {
+    if (!touchStartX || !touchEndX || !touchStartY || !touchEndY) return;
+
+    const deltaX = touchStartX - touchEndX;
+    const deltaY = touchStartY - touchEndY;
+
+    // Ignore diagonal/vertical swipes
+    if (Math.abs(deltaY) > Math.abs(deltaX)) return;
+
+    // 50px threshold for deliberate swipe
+    if (deltaX < -50) goToNextPage();
+    if (deltaX > 50) goToPrevPage();
+  };
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -105,8 +139,12 @@ export default function ImageViewer({
   if (!currentPage) return null;
 
   return (
-    <div className="relative flex h-[100dvh] w-full items-center justify-center overflow-hidden bg-[#0a0a0a] p-4">
-      {/* 1. The sleek, unobtrusive top loading indicator */}
+    <div
+      className="relative flex h-[100dvh] w-full items-center justify-center overflow-hidden bg-[#0a0a0a] p-4"
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={onTouchEnd}
+    >
       {isLoading && (
         <div className="absolute top-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-full bg-[#0f1115]/90 px-4 py-2 shadow-xl ring-1 ring-white/10 backdrop-blur-md">
           <div className="h-4 w-4 animate-spin rounded-full border-2 border-violet-500/30 border-t-violet-400" />
@@ -123,8 +161,6 @@ export default function ImageViewer({
           className="block max-h-[calc(100dvh-2rem)] max-w-full object-contain"
         />
 
-        {/* Removed the obstructive full-screen loader from here! */}
-
         {currentPage.translations && currentPage.translations.length > 0 && (
           <div className="absolute inset-0">
             <TranslationOverlay
@@ -135,13 +171,13 @@ export default function ImageViewer({
         )}
       </div>
 
-      {/* Navigation Zones */}
+      {/* Navigation Zones: Hidden purely via CSS media query on touch devices! */}
       <div
-        className="absolute top-0 bottom-0 left-0 z-30 w-1/3 cursor-w-resize"
+        className="absolute top-0 bottom-0 left-0 z-30 w-1/3 cursor-w-resize [@media(pointer:coarse)]:hidden"
         onClick={goToNextPage}
       />
       <div
-        className="absolute top-0 right-0 bottom-0 z-30 w-1/3 cursor-e-resize"
+        className="absolute top-0 right-0 bottom-0 z-30 w-1/3 cursor-e-resize [@media(pointer:coarse)]:hidden"
         onClick={goToPrevPage}
       />
 
@@ -152,7 +188,6 @@ export default function ImageViewer({
             e.stopPropagation();
             refetch();
           }}
-          // 2. The ✨ button now pulses and slightly dims when it's actively working
           className={cn(
             'rounded-full px-3 py-1.5 text-lg transition-colors',
             isLoading
