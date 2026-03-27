@@ -41,12 +41,14 @@ interface ImageViewerProps {
   pages: MangaPageData[];
   currentIndex: number;
   onIndexChange: (newIndex: number) => void;
+  onClose: () => void;
 }
 
 export default function ImageViewer({
   pages,
   currentIndex,
   onIndexChange,
+  onClose,
 }: ImageViewerProps) {
   const currentPage = pages[currentIndex];
 
@@ -75,11 +77,12 @@ export default function ImageViewer({
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'ArrowLeft') goToNextPage();
       if (e.key === 'ArrowRight') goToPrevPage();
+      if (e.key === 'Escape') onClose();
 
       if (e.altKey || e.ctrlKey) {
         if (e.key.toLowerCase() === 't') {
           e.preventDefault();
-          refetch();
+          refetch().catch();
         }
         if (e.key.toLowerCase() === 'h') {
           e.preventDefault();
@@ -90,7 +93,7 @@ export default function ImageViewer({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [goToNextPage, goToPrevPage, refetch]);
+  }, [goToNextPage, goToPrevPage, onClose, refetch]);
 
   if (!currentPage) return null;
 
