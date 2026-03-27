@@ -17,12 +17,20 @@ async function fetchAndSaveTranslation(
   file: Blob,
   model: string
 ): Promise<TranslationBox[]> {
+  const apiKey = localStorage.getItem('geminiApiKey');
+  if (!apiKey) {
+    throw new Error(
+      'API Key not found. Please save it in the Library settings.'
+    );
+  }
+
   const base64String = await fileToBase64(file);
 
   const response = await fetch('/api/translate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ imageBase64: base64String, model }),
+    // Inject the apiKey here
+    body: JSON.stringify({ imageBase64: base64String, model, apiKey }),
   });
 
   if (!response.ok) {
@@ -31,9 +39,6 @@ async function fetchAndSaveTranslation(
   }
 
   const data = (await response.json()) as { translations: TranslationBox[] };
-
-  // ✨ THE MAGIC HAPPENS HERE ✨
-  // Save the Gemini response directly into the local database
   await db.pages.update(pageId, { translations: data.translations });
 
   return data.translations;

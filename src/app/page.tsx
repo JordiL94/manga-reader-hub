@@ -6,10 +6,8 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
 import { importMangaFiles } from '@/lib/importer';
 import DirectorySelector from '@/components/DirectorySelector';
+import SettingsModal from '@/components/SettingsModal/SettingsModal'; // <-- 1. Import the modal
 
-// --- Sub-component to safely handle Object URLs for Blobs ---
-// We isolate this so each image manages its own memory cleanup,
-// completely avoiding the cascading render linter errors from earlier.
 function CoverImage({ blob, alt }: { blob: Blob; alt: string }) {
   const [url, setUrl] = useState<string | null>(null);
 
@@ -18,8 +16,6 @@ function CoverImage({ blob, alt }: { blob: Blob; alt: string }) {
     const reader = new FileReader();
 
     reader.onload = (e) => {
-      // Because this executes asynchronously after the read operation finishes,
-      // the linter is perfectly happy, and we avoid synchronous cascading renders.
       if (isMounted && e.target?.result) {
         setUrl(e.target.result as string);
       }
@@ -27,7 +23,6 @@ function CoverImage({ blob, alt }: { blob: Blob; alt: string }) {
 
     reader.readAsDataURL(blob);
 
-    // Cleanup function to prevent memory leaks if the component unmounts before reading finishes
     return () => {
       isMounted = false;
     };
@@ -44,12 +39,11 @@ function CoverImage({ blob, alt }: { blob: Blob; alt: string }) {
     />
   );
 }
-// -----------------------------------------------------------
 
 export default function LibraryPage() {
   const [isImporting, setIsImporting] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false); // <-- 2. Modal state
 
-  // useLiveQuery automatically updates this array whenever the database changes
   const mangas = useLiveQuery(() =>
     db.mangas.orderBy('createdAt').reverse().toArray()
   );
@@ -81,10 +75,16 @@ export default function LibraryPage() {
             </p>
           </div>
 
-          <div className="relative">
-            {/* We reuse our DirectorySelector, but now instead of just holding files in RAM, 
-              it passes them to our Dexie importer. 
-            */}
+          <div className="relative flex items-center gap-4">
+            {/* 3. The Settings Button */}
+            <button
+              onClick={() => setIsSettingsOpen(true)}
+              className="flex h-11 w-11 items-center justify-center rounded-full bg-gray-900 text-xl transition-colors hover:bg-gray-800 focus:ring-2 focus:ring-violet-500 focus:outline-none"
+              title="Settings"
+            >
+              ⚙️
+            </button>
+
             <DirectorySelector onFilesSelected={handleImport} />
 
             {isImporting && (
@@ -143,6 +143,12 @@ export default function LibraryPage() {
           ))}
         </div>
       </div>
+
+      {/* 4. Drop the Modal at the bottom */}
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+      />
     </main>
   );
 }

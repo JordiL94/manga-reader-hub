@@ -95,23 +95,27 @@ export default function ImageViewer({
   if (!currentPage) return null;
 
   return (
-    <div className="relative flex h-[100dvh] w-full items-center justify-center overflow-hidden bg-[#0a0a0a]">
-      <div className="relative max-h-full max-w-full">
-        {/* We use our new BlobImage component here instead of a raw img */}
+    // Added p-4 as a "Safe Zone" to keep the image away from the physical screen edges
+    <div className="relative flex h-[100dvh] w-full items-center justify-center overflow-hidden bg-[#0a0a0a] p-4">
+      {/* Added h-full and w-full here.
+          This ensures the container for the image and bubbles
+          never exceeds the 100dvh of the parent.
+      */}
+      <div className="relative flex h-full w-full items-center justify-center">
         <BlobImage
           blob={currentPage.file}
           alt={`Page ${currentIndex + 1}`}
-          className="max-h-full max-w-full object-contain"
+          // max-h-full + object-contain is the secret sauce for perfect fit
+          className="max-h-full max-w-full object-contain shadow-2xl"
         />
 
         {isLoading && (
           <div className="absolute inset-0 z-50 flex flex-col items-center justify-center rounded-lg bg-black/60 text-white backdrop-blur-sm">
             <div className="mb-4 h-10 w-10 animate-spin rounded-full border-4 border-white/30 border-t-violet-500" />
-            <p className="font-medium">Translating panel...</p>
+            <p className="text-sm font-medium">Translating panel...</p>
           </div>
         )}
 
-        {/* If the DB has translations, render them instantly. */}
         {currentPage.translations && currentPage.translations.length > 0 && (
           <TranslationOverlay
             translations={currentPage.translations}
@@ -120,6 +124,7 @@ export default function ImageViewer({
         )}
       </div>
 
+      {/* Navigation Zones remain the same */}
       <div
         className="absolute top-0 bottom-0 left-0 z-30 w-1/3 cursor-w-resize"
         onClick={goToNextPage}
@@ -129,7 +134,8 @@ export default function ImageViewer({
         onClick={goToPrevPage}
       />
 
-      <div className="absolute bottom-6 z-50 flex items-center gap-2 rounded-full bg-[#0f1115]/30 p-1.5 opacity-40 backdrop-blur-sm transition-all duration-200 hover:bg-[#0f1115]/85 hover:opacity-100 hover:shadow-[0_4px_12px_rgba(0,0,0,0.3)]">
+      {/* Control Pill */}
+      <div className="absolute bottom-8 z-50 flex items-center gap-2 rounded-full bg-[#0f1115]/40 p-1.5 opacity-40 backdrop-blur-md transition-all duration-200 hover:bg-[#0f1115]/90 hover:opacity-100 hover:shadow-xl">
         <button
           onClick={(e) => {
             e.stopPropagation();

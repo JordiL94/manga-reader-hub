@@ -1,10 +1,6 @@
 import { NextResponse } from 'next/server';
 import { GoogleGenAI, Type } from '@google/genai';
-import { env } from '@/env';
 import { TranslationBox } from '@/types/manga';
-
-// Initialize the new, modern SDK using the securely validated server-side API key
-const ai = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
 
 const PROMPT = `
   You are an expert manga translator and OCR system. 
@@ -20,11 +16,13 @@ const PROMPT = `
 
 export async function POST(request: Request) {
   try {
+    // Add apiKey to the expected body
     const body = (await request.json()) as {
       imageBase64: string;
       model: string;
+      apiKey: string;
     };
-    const { imageBase64, model } = body;
+    const { imageBase64, model, apiKey } = body;
 
     if (!imageBase64 || !model) {
       return NextResponse.json(
@@ -33,7 +31,16 @@ export async function POST(request: Request) {
       );
     }
 
-    // Strip the data URL prefix if it exists
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: 'API Key is missing. Please add it in settings.' },
+        { status: 401 }
+      );
+    }
+
+    // Initialize the SDK dynamically per request
+    const ai = new GoogleGenAI({ apiKey });
+
     const base64Data = imageBase64.includes(',')
       ? imageBase64.split(',')[1]
       : imageBase64;
@@ -42,17 +49,11 @@ export async function POST(request: Request) {
       model,
       contents: [
         PROMPT,
-        {
-          inlineData: {
-            data: base64Data,
-            mimeType: 'image/jpeg',
-          },
-        },
+        { inlineData: { data: base64Data, mimeType: 'image/jpeg' } },
       ],
       config: {
         responseMimeType: 'application/json',
         temperature: 1.0,
-        // The new SDK uses a slightly different syntax for schema definition
         responseSchema: {
           type: Type.ARRAY,
           items: {
@@ -72,13 +73,9 @@ export async function POST(request: Request) {
     });
 
     const resultText = response.text;
-    if (!resultText) {
-      throw new Error('No text returned from Gemini API');
-    }
+    if (!resultText) throw new Error('No text returned from Gemini API');
 
-    // Since we forced the schema, we can safely parse this directly into our TypeScript interface
     const translations = JSON.parse(resultText) as TranslationBox[];
-
     return NextResponse.json({ translations });
   } catch (error) {
     console.error('Translation API Error:', error);
