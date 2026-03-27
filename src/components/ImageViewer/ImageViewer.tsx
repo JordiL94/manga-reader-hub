@@ -96,26 +96,25 @@ export default function ImageViewer({
 
   return (
     <div className="relative flex h-[100dvh] w-full items-center justify-center overflow-hidden bg-[#0a0a0a] p-4">
-      {/* THE FIX: We removed 'h-full w-full'.
-          This allows the div to perfectly shrink-wrap the image pixels. */}
+      {/* 1. The sleek, unobtrusive top loading indicator */}
+      {isLoading && (
+        <div className="absolute top-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-full bg-[#0f1115]/90 px-4 py-2 shadow-xl ring-1 ring-white/10 backdrop-blur-md">
+          <div className="h-4 w-4 animate-spin rounded-full border-2 border-violet-500/30 border-t-violet-400" />
+          <span className="text-xs font-bold tracking-wide text-violet-200">
+            Translating...
+          </span>
+        </div>
+      )}
+
       <div className="relative flex max-w-full shadow-2xl">
         <BlobImage
           blob={currentPage.file}
           alt={`Page ${currentIndex + 1}`}
-          // We use explicit calc() to bypass flexbox bugs.
-          // 2rem perfectly accounts for the p-4 padding (1rem top + 1rem bottom).
           className="block max-h-[calc(100dvh-2rem)] max-w-full object-contain"
         />
 
-        {isLoading && (
-          <div className="absolute inset-0 z-50 flex flex-col items-center justify-center rounded-lg bg-black/60 text-white backdrop-blur-sm">
-            <div className="mb-4 h-10 w-10 animate-spin rounded-full border-4 border-white/30 border-t-violet-500" />
-            <p className="text-sm font-medium">Translating panel...</p>
-          </div>
-        )}
+        {/* Removed the obstructive full-screen loader from here! */}
 
-        {/* Because the wrapper now perfectly hugs the painted pixels,
-            the 0-1000 math in TranslationOverlay will map flawlessly. */}
         {currentPage.translations && currentPage.translations.length > 0 && (
           <div className="absolute inset-0">
             <TranslationOverlay
@@ -126,7 +125,7 @@ export default function ImageViewer({
         )}
       </div>
 
-      {/* Navigation Zones remain the same */}
+      {/* Navigation Zones */}
       <div
         className="absolute top-0 bottom-0 left-0 z-30 w-1/3 cursor-w-resize"
         onClick={goToNextPage}
@@ -143,8 +142,15 @@ export default function ImageViewer({
             e.stopPropagation();
             refetch();
           }}
-          className="rounded-full px-3 py-1.5 text-lg text-white transition-colors hover:bg-white/10"
+          // 2. The ✨ button now pulses and slightly dims when it's actively working
+          className={cn(
+            'rounded-full px-3 py-1.5 text-lg transition-colors',
+            isLoading
+              ? 'animate-pulse text-white/50'
+              : 'text-white hover:bg-white/10'
+          )}
           title="Translate Panel (Alt/Ctrl + T)"
+          disabled={isLoading}
         >
           ✨
         </button>
