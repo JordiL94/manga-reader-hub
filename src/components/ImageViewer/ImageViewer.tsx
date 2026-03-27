@@ -6,7 +6,6 @@ import { useTranslatePage } from '@/hooks/useTranslatePage';
 import TranslationOverlay from '@/components/TranslationOverlay';
 import { cn } from '@/utils/cn';
 
-// FIX 1: Instant, memory-safe image rendering. No more black corrupted screens!
 function BlobImage({
   blob,
   alt,
@@ -57,7 +56,6 @@ export default function ImageViewer({
 
   const [isAutoTranslate, setIsAutoTranslate] = useState(false);
 
-  // --- UPGRADED SWIPE ANIMATION LOGIC ---
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
   const [touchStartY, setTouchStartY] = useState<number | null>(null);
   const [swipeOffset, setSwipeOffset] = useState<number>(0);
@@ -93,10 +91,8 @@ export default function ImageViewer({
     const dragDistanceX = currentX - touchStartX;
     const dragDistanceY = currentY - touchStartY;
 
-    // Ignore diagonal/vertical swipes to prevent jumpiness
     if (Math.abs(dragDistanceY) > Math.abs(dragDistanceX)) return;
 
-    // Physically move the image with the finger!
     setSwipeOffset(dragDistanceX);
   };
 
@@ -106,15 +102,13 @@ export default function ImageViewer({
     const currentX = e.changedTouches[0].clientX;
     const dragDistanceX = currentX - touchStartX;
 
-    // Reset the visual offset so it snaps back into place
     setSwipeOffset(0);
     setTouchStartX(null);
     setTouchStartY(null);
 
-    // 50px threshold to trigger a page turn
     if (Math.abs(dragDistanceX) > 50) {
-      if (dragDistanceX > 50) goToNextPage(); // Swiped Right
-      if (dragDistanceX < -50) goToPrevPage(); // Swiped Left
+      if (dragDistanceX > 50) goToNextPage();
+      if (dragDistanceX < -50) goToPrevPage();
     }
   };
 
@@ -140,11 +134,52 @@ export default function ImageViewer({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [goToNextPage, goToPrevPage, onClose, refetch]);
 
+  // --- THE SLIDING WINDOW RENDERER ---
+  const renderPage = (offset: number) => {
+    const targetIndex = currentIndex + offset;
+
+    // Don't render pages that don't exist (like before page 1 or after the last page)
+    if (targetIndex < 0 || targetIndex >= pages.length) return null;
+
+    const page = pages[targetIndex];
+    const isCurrent = offset === 0;
+
+    // RTL positioning math. 2rem gap keeps them from sticking together.
+    let transformX = '0';
+    if (offset === 1) transformX = 'calc(-100% - 2rem)'; // Next page on the left
+    if (offset === -1) transformX = 'calc(100% + 2rem)'; // Prev page on the right
+
+    return (
+      <div
+        key={page.id}
+        className="absolute inset-0 flex h-full w-full items-center justify-center"
+        style={{ transform: `translateX(${transformX})` }}
+      >
+        <div className="relative flex max-w-full shadow-2xl">
+          <BlobImage
+            blob={page.file}
+            alt={`Page ${targetIndex + 1}`}
+            className="block max-h-[calc(100dvh-2rem)] max-w-full object-contain"
+          />
+
+          {/* Performance tweak: We ONLY render translations on the active center page */}
+          {isCurrent && page.translations && page.translations.length > 0 && (
+            <div className="absolute inset-0">
+              <TranslationOverlay
+                translations={page.translations}
+                studyMode={studyMode}
+              />
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   if (!currentPage) return null;
 
   return (
     <div
-      // FIX 3: Added 'touch-none' here to completely disable native iPad scrolling!
       className="relative flex h-[100dvh] w-full touch-none items-center justify-center overflow-hidden bg-[#0a0a0a] p-4"
       onTouchStart={onTouchStart}
       onTouchMove={onTouchMove}
@@ -159,34 +194,20 @@ export default function ImageViewer({
         </div>
       )}
 
-      {/* The Animated Image Wrapper */}
+      {/* The Master Container: Everything slides together */}
       <div
         className={cn(
-          'relative flex max-w-full shadow-2xl',
-          // Only animate the CSS transition when the user lets go (snapping back into place)
+          'relative h-full w-full',
+          // The fast 150ms snap makes the page turn feel crisp
           touchStartX === null
-            ? 'transition-transform duration-300 ease-out'
+            ? 'transition-transform duration-150 ease-out'
             : ''
         )}
-        style={{
-          // Maps the container directly to your finger's drag distance
-          transform: `translateX(${swipeOffset}px)`,
-        }}
+        style={{ transform: `translateX(${swipeOffset}px)` }}
       >
-        <BlobImage
-          blob={currentPage.file}
-          alt={`Page ${currentIndex + 1}`}
-          className="block max-h-[calc(100dvh-2rem)] max-w-full object-contain"
-        />
-
-        {currentPage.translations && currentPage.translations.length > 0 && (
-          <div className="absolute inset-0">
-            <TranslationOverlay
-              translations={currentPage.translations}
-              studyMode={studyMode}
-            />
-          </div>
-        )}
+        {renderPage(1)} {/* Render Next Page */}
+        {renderPage(0)} {/* Render Current Page */}
+        {renderPage(-1)} {/* Render Prev Page */}
       </div>
 
       <div
