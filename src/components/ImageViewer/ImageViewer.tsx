@@ -60,6 +60,9 @@ export default function ImageViewer({
   const [touchStartY, setTouchStartY] = useState<number | null>(null);
   const [swipeOffset, setSwipeOffset] = useState<number>(0);
 
+  // NEW: Locks out touches while the glide animation plays
+  const [isAnimating, setIsAnimating] = useState(false);
+
   const { isLoading, refetch } = useTranslatePage(
     currentPage?.id,
     currentPage?.file,
@@ -77,13 +80,16 @@ export default function ImageViewer({
   }, [currentIndex, onIndexChange]);
 
   const onTouchStart = (e: React.TouchEvent) => {
+    // Prevent catching a new swipe if we are still gliding
+    if (isAnimating) return;
+
     setTouchStartX(e.targetTouches[0].clientX);
     setTouchStartY(e.targetTouches[0].clientY);
     setSwipeOffset(0);
   };
 
   const onTouchMove = (e: React.TouchEvent) => {
-    if (touchStartX === null || touchStartY === null) return;
+    if (touchStartX === null || touchStartY === null || isAnimating) return;
 
     const currentX = e.targetTouches[0].clientX;
     const currentY = e.targetTouches[0].clientY;
@@ -97,18 +103,41 @@ export default function ImageViewer({
   };
 
   const onTouchEnd = (e: React.TouchEvent) => {
-    if (touchStartX === null) return;
+    if (touchStartX === null || isAnimating) return;
 
     const currentX = e.changedTouches[0].clientX;
     const dragDistanceX = currentX - touchStartX;
 
-    setSwipeOffset(0);
     setTouchStartX(null);
     setTouchStartY(null);
 
+    // 50px threshold to trigger a page turn
     if (Math.abs(dragDistanceX) > 50) {
-      if (dragDistanceX > 50) goToNextPage();
-      if (dragDistanceX < -50) goToPrevPage();
+      setIsAnimating(true);
+
+      // Calculate the full screen width to glide it entirely off-screen
+      const screenWidth = window.innerWidth;
+
+      if (dragDistanceX > 50) {
+        // Swiping right (reveals left page / Next Page)
+        setSwipeOffset(screenWidth);
+        setTimeout(() => {
+          goToNextPage();
+          setSwipeOffset(0);
+          setIsAnimating(false);
+        }, 200); // 200ms matches our CSS transition duration
+      } else {
+        // Swiping left (reveals right page / Prev Page)
+        setSwipeOffset(-screenWidth);
+        setTimeout(() => {
+          goToPrevPage();
+          setSwipeOffset(0);
+          setIsAnimating(false);
+        }, 200);
+      }
+    } else {
+      // Didn't swipe far enough, just snap back to center
+      setSwipeOffset(0);
     }
   };
 
@@ -134,20 +163,17 @@ export default function ImageViewer({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [goToNextPage, goToPrevPage, onClose, refetch]);
 
-  // --- THE SLIDING WINDOW RENDERER ---
   const renderPage = (offset: number) => {
     const targetIndex = currentIndex + offset;
 
-    // Don't render pages that don't exist (like before page 1 or after the last page)
     if (targetIndex < 0 || targetIndex >= pages.length) return null;
 
     const page = pages[targetIndex];
     const isCurrent = offset === 0;
 
-    // RTL positioning math. 2rem gap keeps them from sticking together.
     let transformX = '0';
-    if (offset === 1) transformX = 'calc(-100% - 2rem)'; // Next page on the left
-    if (offset === -1) transformX = 'calc(100% + 2rem)'; // Prev page on the right
+    if (offset === 1) transformX = 'calc(-100% - 2rem)';
+    if (offset === -1) transformX = 'calc(100% + 2rem)';
 
     return (
       <div
@@ -162,7 +188,6 @@ export default function ImageViewer({
             className="block max-h-[calc(100dvh-2rem)] max-w-full object-contain"
           />
 
-          {/* Performance tweak: We ONLY render translations on the active center page */}
           {isCurrent && page.translations && page.translations.length > 0 && (
             <div className="absolute inset-0">
               <TranslationOverlay
@@ -194,20 +219,22 @@ export default function ImageViewer({
         </div>
       )}
 
-      {/* The Master Container: Everything slides together */}
+      {/* The Master Container:
+        When isAnimating is true, the 200ms CSS transition takes over.
+        When false (during a drag), it perfectly tracks your finger instantly.
+      */}
       <div
         className={cn(
           'relative h-full w-full',
-          // The fast 150ms snap makes the page turn feel crisp
-          touchStartX === null
-            ? 'transition-transform duration-150 ease-out'
+          touchStartX === null || isAnimating
+            ? 'transition-transform duration-200 ease-out'
             : ''
         )}
         style={{ transform: `translateX(${swipeOffset}px)` }}
       >
-        {renderPage(1)} {/* Render Next Page */}
-        {renderPage(0)} {/* Render Current Page */}
-        {renderPage(-1)} {/* Render Prev Page */}
+        {renderPage(1)}
+        {renderPage(0)}
+        {renderPage(-1)}
       </div>
 
       <div
