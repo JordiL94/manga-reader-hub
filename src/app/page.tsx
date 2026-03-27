@@ -6,8 +6,8 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
 import { importMangaFiles } from '@/lib/importer';
 import DirectorySelector from '@/components/DirectorySelector';
-import SettingsModal from '@/components/SettingsModal/SettingsModal';
 import CoverImage from '@/components/Library/CoverImage';
+import SettingsPanel from '@/components/SettingsPanel';
 
 export default function LibraryPage() {
   const [isImporting, setIsImporting] = useState<boolean>(false);
@@ -122,7 +122,7 @@ export default function LibraryPage() {
         </div>
       </div>
 
-      <SettingsModal
+      <SettingsPanel
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
       />
