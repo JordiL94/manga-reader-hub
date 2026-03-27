@@ -7,7 +7,7 @@ const PROMPT = `
   Carefully scan the ENTIRE image and identify EVERY distinct block of text.
   Translate the Japanese text to natural-sounding English.
   
-  You MUST return a valid JSON array of objects. Do NOT wrap the JSON in markdown blocks.
+  You MUST return a valid JSON array of objects. Do NOT wrap the JSON in markdown blocks (like \`\`\`json). Just the raw JSON.
   Each object must have exactly these three keys:
   1. "box_2d": An array of 4 integers between 0 and 1000 representing the bounding box [ymin, xmin, ymax, xmax].
   2. "translation": The English translation.

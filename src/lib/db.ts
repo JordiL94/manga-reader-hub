@@ -10,9 +10,10 @@ export interface Manga {
 
 export interface Volume {
   id: string;
-  mangaId: string; // Links back to the Manga
+  mangaId: string;
   title: string;
   createdAt: number;
+  lastReadPageIndex?: number;
 }
 
 export interface MangaPage {

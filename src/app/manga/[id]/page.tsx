@@ -1,44 +1,24 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
+import CoverImage from '@/components/Library/CoverImage';
+import ConfirmModal from '@/components/ConfirmModal';
 
-function BlobImage({
-  blob,
-  alt,
-  className,
-}: {
-  blob: Blob;
-  alt: string;
-  className?: string;
-}) {
-  const [url, setUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    let isMounted = true;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      if (isMounted && e.target?.result) setUrl(e.target.result as string);
-    };
-    reader.readAsDataURL(blob);
-    return () => {
-      isMounted = false;
-    };
-  }, [blob]);
-
-  if (!url) return <div className={`animate-pulse bg-gray-800 ${className}`} />;
-
-  // eslint-disable-next-line @next/next/no-img-element
-  return <img src={url} alt={alt} className={className} />;
-}
+type DeletePrompt =
+  | { type: 'manga' }
+  | { type: 'volume'; id: string; title: string }
+  | null;
 
 export default function MangaDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
+
   const [isDeleting, setIsDeleting] = useState(false);
+  const [deletePrompt, setDeletePrompt] = useState<DeletePrompt>(null);
 
   const manga = useLiveQuery(() => db.mangas.get(params.id), [params.id]);
   const volumes = useLiveQuery(
@@ -46,140 +26,170 @@ export default function MangaDetailPage() {
     [params.id]
   );
 
-  const handleDeleteManga = async () => {
-    const confirmed = window.confirm(
-      'Are you sure you want to delete this ENTIRE manga? This will permanently remove all volumes, pages, and cached translations.'
-    );
-    if (!confirmed) return;
+  const executeDelete = async () => {
+    if (!deletePrompt) return;
+    setIsDeleting(true);
 
     try {
-      setIsDeleting(true);
-      const vols = await db.volumes
-        .where('mangaId')
-        .equals(params.id)
-        .toArray();
-      const volumeIds = vols.map((v) => v.id);
+      if (deletePrompt.type === 'manga') {
+        const vols = await db.volumes
+          .where('mangaId')
+          .equals(params.id)
+          .toArray();
+        const volumeIds = vols.map((v) => v.id);
 
-      if (volumeIds.length > 0) {
-        await db.pages.where('volumeId').anyOf(volumeIds).delete();
+        if (volumeIds.length > 0) {
+          await db.pages.where('volumeId').anyOf(volumeIds).delete();
+        }
+        await db.volumes.where('mangaId').equals(params.id).delete();
+        await db.mangas.delete(params.id);
+
+        router.push('/');
+        return;
       }
-      await db.volumes.where('mangaId').equals(params.id).delete();
-      await db.mangas.delete(params.id);
 
-      router.push('/');
+      if (deletePrompt.type === 'volume') {
+        await db.pages.where('volumeId').equals(deletePrompt.id).delete();
+        await db.volumes.delete(deletePrompt.id);
+      }
     } catch (error) {
-      console.error('Failed to delete manga:', error);
-      alert('Error deleting manga. Check console.');
+      console.error('Failed to delete:', error);
+      alert('Error during deletion. Check console.');
+    } finally {
       setIsDeleting(false);
-    }
-  };
-
-  // NEW: The 2-minute Volume Delete fix
-  const handleDeleteVolume = async (volumeId: string, volumeTitle: string) => {
-    const confirmed = window.confirm(
-      `Are you sure you want to delete ${volumeTitle}? This frees up storage but you'll have to re-import it later to read it again.`
-    );
-    if (!confirmed) return;
-
-    try {
-      // 1. Nuke all pages inside this volume
-      await db.pages.where('volumeId').equals(volumeId).delete();
-      // 2. Nuke the volume record itself
-      await db.volumes.delete(volumeId);
-    } catch (error) {
-      console.error('Failed to delete volume:', error);
-      alert('Error deleting volume. Check console.');
+      setDeletePrompt(null);
     }
   };
 
   if (manga === undefined || volumes === undefined) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#0a0a0a]">
-        <div className="h-10 w-10 animate-spin rounded-full border-4 border-gray-600 border-t-blue-500" />
+      <div className="flex min-h-[100dvh] items-center justify-center bg-[#0a0a0a]">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-800 border-t-violet-500" />
       </div>
     );
   }
 
   if (manga === null) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-[#0a0a0a] text-white">
+      <div className="flex min-h-[100dvh] flex-col items-center justify-center bg-[#0a0a0a] text-white">
         <h1 className="mb-4 text-2xl font-bold">Manga not found</h1>
-        <Link href="/" className="text-blue-500 hover:underline">
+        <Link href="/" className="text-violet-500 hover:underline">
           Return to Library
         </Link>
       </div>
     );
   }
 
+  // Derive modal props based on current state to keep JSX clean
+  const modalTitle =
+    deletePrompt?.type === 'manga' ? 'Delete Entire Manga?' : 'Delete Volume?';
+  const modalDesc =
+    deletePrompt?.type === 'manga'
+      ? 'This will permanently remove all volumes, pages, and cached translations for this manga from your device. You cannot undo this.'
+      : `Are you sure you want to delete "${deletePrompt?.type === 'volume' ? deletePrompt.title : ''}"? This frees up storage, but you'll have to re-import it to read it again.`;
+
   return (
-    <main className="min-h-screen bg-[#0a0a0a] p-8 text-white">
-      <div className="mx-auto max-w-5xl">
+    <main className="relative min-h-[100dvh] bg-[#0a0a0a] p-8 text-white">
+      <div className="mx-auto max-w-4xl">
         <Link
           href="/"
-          className="mb-8 inline-flex items-center text-sm text-gray-400 transition-colors hover:text-white"
+          className="group mb-10 inline-flex items-center gap-2 text-sm font-medium text-gray-500 transition-colors hover:text-gray-300"
         >
-          ← Back to Library
+          <span className="transition-transform duration-200 group-hover:-translate-x-1">
+            ←
+          </span>
+          Back to Library
         </Link>
 
-        <div className="mb-12 flex flex-col gap-8 sm:flex-row">
-          <div className="h-64 w-48 shrink-0 overflow-hidden rounded-lg shadow-lg ring-1 ring-white/10">
+        <div className="mb-14 flex flex-col gap-8 sm:flex-row sm:items-end">
+          <div className="h-72 w-48 shrink-0 overflow-hidden rounded-md bg-[#16181d] shadow-2xl ring-1 ring-white/10">
             {manga.coverImage ? (
-              <BlobImage
+              <CoverImage
                 blob={manga.coverImage}
                 alt={manga.title}
                 className="h-full w-full object-cover"
               />
             ) : (
-              <div className="flex h-full w-full items-center justify-center bg-gray-800">
+              <div className="flex h-full w-full items-center justify-center text-sm font-medium text-gray-600">
                 No Cover
               </div>
             )}
           </div>
 
-          <div className="flex flex-col justify-end">
-            <h1 className="mb-2 text-4xl font-bold tracking-tight">
+          <div className="flex flex-col justify-end pb-2">
+            <h1 className="mb-2 text-4xl font-bold tracking-tight text-white">
               {manga.title}
             </h1>
-            <p className="mb-6 text-gray-400">{volumes.length} Volumes</p>
+            <p className="mb-8 text-sm font-medium text-gray-400">
+              {volumes.length} {volumes.length === 1 ? 'Volume' : 'Volumes'}
+            </p>
 
             <button
-              onClick={handleDeleteManga}
-              disabled={isDeleting}
-              className="w-fit rounded bg-red-900/50 px-6 py-2.5 text-sm font-semibold text-red-200 transition-colors hover:bg-red-800 disabled:opacity-50"
+              onClick={() => setDeletePrompt({ type: 'manga' })}
+              className="w-fit rounded-md border border-gray-800 px-5 py-2 text-sm font-medium text-gray-400 transition-all hover:border-red-900/50 hover:bg-red-900/20 hover:text-red-400 focus:ring-2 focus:ring-red-500/50 focus:outline-none"
             >
-              {isDeleting ? 'Deleting...' : 'Delete Entire Manga'}
+              Delete Entire Manga
             </button>
           </div>
         </div>
 
-        <h2 className="mb-6 text-2xl font-semibold">Volumes</h2>
+        <div className="mb-6 flex items-center justify-between border-b border-white/10 pb-4">
+          <h2 className="text-xl font-semibold text-gray-200">Volumes</h2>
+        </div>
+
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {volumes.map((volume) => (
-            <div
+            <Link
               key={volume.id}
-              className="flex items-center justify-between rounded-lg border border-gray-800 bg-gray-900/50 p-4 transition-colors hover:bg-gray-800/80"
+              href={`/reader/${volume.id}`}
+              className="group flex items-center justify-between rounded-md border border-white/5 bg-[#16181d] p-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-violet-500/30 hover:bg-[#1f2229] hover:shadow-lg hover:shadow-violet-900/10"
             >
-              <span className="mr-4 truncate font-medium">{volume.title}</span>
+              <span className="mr-4 truncate font-medium text-gray-300 transition-colors group-hover:text-violet-100">
+                {volume.title}
+              </span>
 
-              <div className="flex shrink-0 items-center gap-2">
-                <button
-                  onClick={() => handleDeleteVolume(volume.id, volume.title)}
-                  className="rounded-full bg-gray-800 px-3 py-2 text-sm font-semibold text-gray-400 transition-all hover:bg-red-900/80 hover:text-red-200"
-                  title="Delete Volume"
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  setDeletePrompt({
+                    type: 'volume',
+                    id: volume.id,
+                    title: volume.title,
+                  });
+                }}
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded text-gray-600 opacity-0 transition-all group-hover:opacity-100 hover:bg-red-900/30 hover:text-red-400"
+                title="Delete Volume"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
                 >
-                  🗑️
-                </button>
-                <Link
-                  href={`/reader/${volume.id}`}
-                  className="rounded-full bg-blue-600 px-6 py-2 text-sm font-semibold text-white transition-all hover:bg-blue-500 active:scale-95"
-                >
-                  Read
-                </Link>
-              </div>
-            </div>
+                  <path d="M3 6h18"></path>
+                  <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
+                  <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
+                </svg>
+              </button>
+            </Link>
           ))}
         </div>
       </div>
+
+      <ConfirmModal
+        isOpen={!!deletePrompt}
+        title={modalTitle}
+        description={modalDesc}
+        type="delete"
+        isLoading={isDeleting}
+        onConfirm={executeDelete}
+        onCancel={() => setDeletePrompt(null)}
+      />
     </main>
   );
 }
