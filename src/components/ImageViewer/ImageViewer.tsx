@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useCallback, useState } from 'react';
+import { useEffect, useCallback, useState, useRef } from 'react';
 import type { MangaPageData } from '@/types/manga';
 import { useTranslatePage } from '@/hooks/useTranslatePage';
 import TranslationOverlay from '@/components/TranslationOverlay';
 import { cn } from '@/utils/cn';
 
+// FIX 1: Instant, memory-safe image rendering. No more black corrupted screens!
 function BlobImage({
   blob,
   alt,
@@ -15,25 +16,17 @@ function BlobImage({
   alt: string;
   className?: string;
 }) {
-  const [url, setUrl] = useState<string | null>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
 
   useEffect(() => {
-    let isMounted = true;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      if (isMounted && e.target?.result) setUrl(e.target.result as string);
-    };
-    reader.readAsDataURL(blob);
-    return () => {
-      isMounted = false;
-    };
+    if (!imgRef.current || !blob) return;
+    const objectUrl = URL.createObjectURL(blob);
+    imgRef.current.src = objectUrl;
+
+    return () => URL.revokeObjectURL(objectUrl);
   }, [blob]);
 
-  if (!url)
-    return <div className={cn('animate-pulse bg-gray-900', className)} />;
-
-  // eslint-disable-next-line @next/next/no-img-element
-  return <img src={url} alt={alt} className={className} />;
+  return <img ref={imgRef} alt={alt} className={className} />;
 }
 
 interface ImageViewerProps {
@@ -51,7 +44,6 @@ export default function ImageViewer({
 }: ImageViewerProps) {
   const currentPage = pages[currentIndex];
 
-  // Linter-safe lazy initialization
   const [studyMode, setStudyMode] = useState(() =>
     typeof window !== 'undefined'
       ? localStorage.getItem('defaultStudyMode') === 'true'
@@ -65,11 +57,10 @@ export default function ImageViewer({
 
   const [isAutoTranslate, setIsAutoTranslate] = useState(false);
 
-  // --- TOUCH SWIPE LOGIC (No device detection state needed!) ---
+  // --- UPGRADED SWIPE ANIMATION LOGIC ---
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
   const [touchStartY, setTouchStartY] = useState<number | null>(null);
-  const [touchEndX, setTouchEndX] = useState<number | null>(null);
-  const [touchEndY, setTouchEndY] = useState<number | null>(null);
+  const [swipeOffset, setSwipeOffset] = useState<number>(0);
 
   const { isLoading, refetch } = useTranslatePage(
     currentPage?.id,
@@ -87,31 +78,44 @@ export default function ImageViewer({
     if (currentIndex > 0) onIndexChange(currentIndex - 1);
   }, [currentIndex, onIndexChange]);
 
-  // Touch Handlers
   const onTouchStart = (e: React.TouchEvent) => {
-    setTouchEndX(null);
-    setTouchEndY(null);
     setTouchStartX(e.targetTouches[0].clientX);
     setTouchStartY(e.targetTouches[0].clientY);
+    setSwipeOffset(0);
   };
 
   const onTouchMove = (e: React.TouchEvent) => {
-    setTouchEndX(e.targetTouches[0].clientX);
-    setTouchEndY(e.targetTouches[0].clientY);
+    if (touchStartX === null || touchStartY === null) return;
+
+    const currentX = e.targetTouches[0].clientX;
+    const currentY = e.targetTouches[0].clientY;
+
+    const dragDistanceX = currentX - touchStartX;
+    const dragDistanceY = currentY - touchStartY;
+
+    // Ignore diagonal/vertical swipes to prevent jumpiness
+    if (Math.abs(dragDistanceY) > Math.abs(dragDistanceX)) return;
+
+    // Physically move the image with the finger!
+    setSwipeOffset(dragDistanceX);
   };
 
-  const onTouchEnd = () => {
-    if (!touchStartX || !touchEndX || !touchStartY || !touchEndY) return;
+  const onTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX === null) return;
 
-    const deltaX = touchStartX - touchEndX;
-    const deltaY = touchStartY - touchEndY;
+    const currentX = e.changedTouches[0].clientX;
+    const dragDistanceX = currentX - touchStartX;
 
-    // Ignore diagonal/vertical swipes
-    if (Math.abs(deltaY) > Math.abs(deltaX)) return;
+    // Reset the visual offset so it snaps back into place
+    setSwipeOffset(0);
+    setTouchStartX(null);
+    setTouchStartY(null);
 
-    // 50px threshold for deliberate swipe
-    if (deltaX < -50) goToNextPage();
-    if (deltaX > 50) goToPrevPage();
+    // 50px threshold to trigger a page turn
+    if (Math.abs(dragDistanceX) > 50) {
+      if (dragDistanceX > 50) goToNextPage(); // Swiped Right
+      if (dragDistanceX < -50) goToPrevPage(); // Swiped Left
+    }
   };
 
   useEffect(() => {
@@ -140,7 +144,8 @@ export default function ImageViewer({
 
   return (
     <div
-      className="relative flex h-[100dvh] w-full items-center justify-center overflow-hidden bg-[#0a0a0a] p-4"
+      // FIX 3: Added 'touch-none' here to completely disable native iPad scrolling!
+      className="relative flex h-[100dvh] w-full touch-none items-center justify-center overflow-hidden bg-[#0a0a0a] p-4"
       onTouchStart={onTouchStart}
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
@@ -154,7 +159,20 @@ export default function ImageViewer({
         </div>
       )}
 
-      <div className="relative flex max-w-full shadow-2xl">
+      {/* The Animated Image Wrapper */}
+      <div
+        className={cn(
+          'relative flex max-w-full shadow-2xl',
+          // Only animate the CSS transition when the user lets go (snapping back into place)
+          touchStartX === null
+            ? 'transition-transform duration-300 ease-out'
+            : ''
+        )}
+        style={{
+          // Maps the container directly to your finger's drag distance
+          transform: `translateX(${swipeOffset}px)`,
+        }}
+      >
         <BlobImage
           blob={currentPage.file}
           alt={`Page ${currentIndex + 1}`}
@@ -171,7 +189,6 @@ export default function ImageViewer({
         )}
       </div>
 
-      {/* Navigation Zones: Hidden purely via CSS media query on touch devices! */}
       <div
         className="absolute top-0 bottom-0 left-0 z-30 w-1/3 cursor-w-resize [@media(pointer:coarse)]:hidden"
         onClick={goToNextPage}

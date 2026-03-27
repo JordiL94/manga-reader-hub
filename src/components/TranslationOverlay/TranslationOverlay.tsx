@@ -68,7 +68,6 @@ export default function TranslationOverlay({
             {/* The actual bubble */}
             <div
               onClick={(e) => handleBubbleTap(index, e)}
-              onTouchEnd={(e) => handleBubbleTap(index, e)}
               className={cn(
                 // Base styles ported from your CSS
                 'pointer-events-auto flex h-full w-full cursor-pointer items-center justify-center rounded-lg border border-violet-500/50 bg-[#0f1115]/85 px-0.5 py-2 text-center text-sm font-medium break-words text-white shadow-[0_4px_12px_rgba(0,0,0,0.3)] backdrop-blur-sm transition-opacity duration-200',
