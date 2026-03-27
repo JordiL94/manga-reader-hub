@@ -56,11 +56,10 @@ export default function ImageViewer({
 
   const [isAutoTranslate, setIsAutoTranslate] = useState(false);
 
+  // --- THE TRACK CAROUSEL STATE ---
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
   const [touchStartY, setTouchStartY] = useState<number | null>(null);
   const [swipeOffset, setSwipeOffset] = useState<number>(0);
-
-  // NEW: Locks out touches while the glide animation plays
   const [isAnimating, setIsAnimating] = useState(false);
 
   const { isLoading, refetch } = useTranslatePage(
@@ -72,17 +71,23 @@ export default function ImageViewer({
   );
 
   const goToNextPage = useCallback(() => {
-    if (currentIndex < pages.length - 1) onIndexChange(currentIndex + 1);
+    if (currentIndex < pages.length - 1) {
+      setIsAnimating(true);
+      onIndexChange(currentIndex + 1);
+      setTimeout(() => setIsAnimating(false), 300); // Lock interactions during CSS slide
+    }
   }, [currentIndex, pages.length, onIndexChange]);
 
   const goToPrevPage = useCallback(() => {
-    if (currentIndex > 0) onIndexChange(currentIndex - 1);
+    if (currentIndex > 0) {
+      setIsAnimating(true);
+      onIndexChange(currentIndex - 1);
+      setTimeout(() => setIsAnimating(false), 300);
+    }
   }, [currentIndex, onIndexChange]);
 
   const onTouchStart = (e: React.TouchEvent) => {
-    // Prevent catching a new swipe if we are still gliding
-    if (isAnimating) return;
-
+    if (isAnimating) return; // Prevent messy multi-swiping
     setTouchStartX(e.targetTouches[0].clientX);
     setTouchStartY(e.targetTouches[0].clientY);
     setSwipeOffset(0);
@@ -91,11 +96,8 @@ export default function ImageViewer({
   const onTouchMove = (e: React.TouchEvent) => {
     if (touchStartX === null || touchStartY === null || isAnimating) return;
 
-    const currentX = e.targetTouches[0].clientX;
-    const currentY = e.targetTouches[0].clientY;
-
-    const dragDistanceX = currentX - touchStartX;
-    const dragDistanceY = currentY - touchStartY;
+    const dragDistanceX = e.targetTouches[0].clientX - touchStartX;
+    const dragDistanceY = e.targetTouches[0].clientY - touchStartY;
 
     if (Math.abs(dragDistanceY) > Math.abs(dragDistanceX)) return;
 
@@ -105,39 +107,21 @@ export default function ImageViewer({
   const onTouchEnd = (e: React.TouchEvent) => {
     if (touchStartX === null || isAnimating) return;
 
-    const currentX = e.changedTouches[0].clientX;
-    const dragDistanceX = currentX - touchStartX;
+    const dragDistanceX = e.changedTouches[0].clientX - touchStartX;
 
+    // Instantly reset the drag variables.
+    // The CSS transition class takes over the moment touchStartX becomes null!
     setTouchStartX(null);
     setTouchStartY(null);
+    setSwipeOffset(0);
 
-    // 50px threshold to trigger a page turn
     if (Math.abs(dragDistanceX) > 50) {
-      setIsAnimating(true);
-
-      // Calculate the full screen width to glide it entirely off-screen
-      const screenWidth = window.innerWidth;
-
-      if (dragDistanceX > 50) {
-        // Swiping right (reveals left page / Next Page)
-        setSwipeOffset(screenWidth);
-        setTimeout(() => {
-          goToNextPage();
-          setSwipeOffset(0);
-          setIsAnimating(false);
-        }, 200); // 200ms matches our CSS transition duration
-      } else {
-        // Swiping left (reveals right page / Prev Page)
-        setSwipeOffset(-screenWidth);
-        setTimeout(() => {
-          goToPrevPage();
-          setSwipeOffset(0);
-          setIsAnimating(false);
-        }, 200);
-      }
+      if (dragDistanceX > 50) goToNextPage();
+      if (dragDistanceX < -50) goToPrevPage();
     } else {
-      // Didn't swipe far enough, just snap back to center
-      setSwipeOffset(0);
+      // Didn't drag far enough, snap back to center
+      setIsAnimating(true);
+      setTimeout(() => setIsAnimating(false), 300);
     }
   };
 
@@ -163,45 +147,12 @@ export default function ImageViewer({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [goToNextPage, goToPrevPage, onClose, refetch]);
 
-  const renderPage = (offset: number) => {
-    const targetIndex = currentIndex + offset;
-
-    if (targetIndex < 0 || targetIndex >= pages.length) return null;
-
-    const page = pages[targetIndex];
-    const isCurrent = offset === 0;
-
-    let transformX = '0';
-    if (offset === 1) transformX = 'calc(-100% - 2rem)';
-    if (offset === -1) transformX = 'calc(100% + 2rem)';
-
-    return (
-      <div
-        key={page.id}
-        className="absolute inset-0 flex h-full w-full items-center justify-center"
-        style={{ transform: `translateX(${transformX})` }}
-      >
-        <div className="relative flex max-w-full shadow-2xl">
-          <BlobImage
-            blob={page.file}
-            alt={`Page ${targetIndex + 1}`}
-            className="block max-h-[calc(100dvh-2rem)] max-w-full object-contain"
-          />
-
-          {isCurrent && page.translations && page.translations.length > 0 && (
-            <div className="absolute inset-0">
-              <TranslationOverlay
-                translations={page.translations}
-                studyMode={studyMode}
-              />
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  };
-
   if (!currentPage) return null;
+
+  const isDragging = touchStartX !== null;
+
+  // Track Math (RTL): Reverses the movement so swiping right goes to the next manga page
+  const trackTransform = `calc(${currentIndex * 100}% + ${currentIndex * 2}rem + ${swipeOffset}px)`;
 
   return (
     <div
@@ -219,22 +170,53 @@ export default function ImageViewer({
         </div>
       )}
 
-      {/* The Master Container:
-        When isAnimating is true, the 200ms CSS transition takes over.
-        When false (during a drag), it perfectly tracks your finger instantly.
+      {/* THE MASTER TRACK:
+          If dragging, transition is off so it sticks instantly to your finger.
+          The exact millisecond you let go, the 300ms transition kicks in and glides it to the new index!
       */}
       <div
         className={cn(
           'relative h-full w-full',
-          touchStartX === null || isAnimating
-            ? 'transition-transform duration-200 ease-out'
-            : ''
+          isDragging
+            ? 'transition-none'
+            : 'transition-transform duration-300 ease-out'
         )}
-        style={{ transform: `translateX(${swipeOffset}px)` }}
+        style={{ transform: `translateX(${trackTransform})` }}
       >
-        {renderPage(1)}
-        {renderPage(0)}
-        {renderPage(-1)}
+        {pages.map((page, index) => {
+          // Optimization: Only render the current page, the previous, and the next.
+          // Everything else is left out of the DOM to save massive amounts of RAM.
+          if (Math.abs(index - currentIndex) > 1) return null;
+
+          // Local position on the track (RTL: Page 1 is physically to the left of Page 0)
+          const positionX = `calc(${index * -100}% - ${index * 2}rem)`;
+
+          return (
+            <div
+              key={page.id} // Keys never change, meaning 0 image flicker!
+              className="absolute inset-0 flex h-full w-full items-center justify-center"
+              style={{ transform: `translateX(${positionX})` }}
+            >
+              <div className="relative flex max-w-full shadow-2xl">
+                <BlobImage
+                  blob={page.file}
+                  alt={`Page ${index + 1}`}
+                  className="block max-h-[calc(100dvh-2rem)] max-w-full object-contain"
+                />
+
+                {/* We now render translations for ALL pages in the window so they slide cleanly with the image */}
+                {page.translations && page.translations.length > 0 && (
+                  <div className="absolute inset-0">
+                    <TranslationOverlay
+                      translations={page.translations}
+                      studyMode={studyMode}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       <div
