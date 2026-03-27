@@ -95,18 +95,16 @@ export default function ImageViewer({
   if (!currentPage) return null;
 
   return (
-    // Added p-4 as a "Safe Zone" to keep the image away from the physical screen edges
     <div className="relative flex h-[100dvh] w-full items-center justify-center overflow-hidden bg-[#0a0a0a] p-4">
-      {/* Added h-full and w-full here.
-          This ensures the container for the image and bubbles
-          never exceeds the 100dvh of the parent.
-      */}
-      <div className="relative flex h-full w-full items-center justify-center">
+      {/* THE FIX: We removed 'h-full w-full'.
+          This allows the div to perfectly shrink-wrap the image pixels. */}
+      <div className="relative flex max-w-full shadow-2xl">
         <BlobImage
           blob={currentPage.file}
           alt={`Page ${currentIndex + 1}`}
-          // max-h-full + object-contain is the secret sauce for perfect fit
-          className="max-h-full max-w-full object-contain shadow-2xl"
+          // We use explicit calc() to bypass flexbox bugs.
+          // 2rem perfectly accounts for the p-4 padding (1rem top + 1rem bottom).
+          className="block max-h-[calc(100dvh-2rem)] max-w-full object-contain"
         />
 
         {isLoading && (
@@ -116,11 +114,15 @@ export default function ImageViewer({
           </div>
         )}
 
+        {/* Because the wrapper now perfectly hugs the painted pixels,
+            the 0-1000 math in TranslationOverlay will map flawlessly. */}
         {currentPage.translations && currentPage.translations.length > 0 && (
-          <TranslationOverlay
-            translations={currentPage.translations}
-            studyMode={studyMode}
-          />
+          <div className="absolute inset-0">
+            <TranslationOverlay
+              translations={currentPage.translations}
+              studyMode={studyMode}
+            />
+          </div>
         )}
       </div>
 
