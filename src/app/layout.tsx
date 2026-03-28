@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import QueryProvider from '@/components/providers/QueryProvider';
+import ServiceWorkerRegistry from '@/components/ServiceWorkerRegistry';
 
 export const metadata: Metadata = {
   title: 'Manga Hub',
@@ -17,6 +18,7 @@ export default function RootLayout({
     <html lang="en">
       {/* We set a black background and white text by default to act as a dark mode canvas for reading */}
       <body className="min-h-screen bg-black text-white antialiased">
+        <ServiceWorkerRegistry />
         <QueryProvider>{children}</QueryProvider>
       </body>
     </html>
