@@ -1,11 +1,13 @@
 import type { NextConfig } from 'next';
-import withPWAInit from '@ducanh2912/next-pwa';
+import withSerwistInit from '@serwist/next';
 import './src/env';
 
-const withPWA = withPWAInit({
-  dest: 'public',
+const withSerwist = withSerwistInit({
+  // This points to the file we just created
+  swSrc: 'src/app/sw.ts',
+  // This is where Serwist will output the compiled worker
+  swDest: 'public/sw.js',
   disable: process.env.NODE_ENV === 'development',
-  register: true,
 });
 
 const nextConfig: NextConfig = {
@@ -15,4 +17,4 @@ const nextConfig: NextConfig = {
   turbopack: {},
 };
 
-export default withPWA(nextConfig);
+export default withSerwist(nextConfig);
