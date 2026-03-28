@@ -1,18 +1,17 @@
 import type { NextConfig } from 'next';
-import withPWAInit from '@ducanh2912/next-pwa';
+import withSerwistInit from '@serwist/next';
 import './src/env';
 
-const withPWA = withPWAInit({
-  dest: 'public',
-  disable: process.env.NODE_ENV === 'development',
-  register: true,
+const withSerwist = withSerwistInit({
+  swSrc: 'src/app/sw.ts',
+  swDest: 'public/sw.js',
+  // Updated to exactly match Serwist's requested environment check
+  disable: process.env.NODE_ENV !== 'production',
 });
 
 const nextConfig: NextConfig = {
   reactCompiler: true,
-  // This explicitly tells Next.js 16 it is safe to proceed with Turbopack,
-  // ignoring the Webpack config injected by the PWA plugin during dev.
-  turbopack: {},
+  // REMOVED the turbopack object entirely so Serwist can use Webpack to build the SW
 };
 
-export default withPWA(nextConfig);
+export default withSerwist(nextConfig);

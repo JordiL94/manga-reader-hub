@@ -1,10 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
+import type { Manga, Volume } from '@/lib/db';
 import CoverImage from '@/components/Library/CoverImage';
 import ConfirmModal from '@/components/ConfirmModal';
 
@@ -13,18 +13,17 @@ type DeletePrompt =
   | { type: 'volume'; id: string; title: string }
   | null;
 
-export default function MangaDetailPage() {
-  const params = useParams<{ id: string }>();
+interface MangaUIProps {
+  manga: Manga;
+  volumes: Volume[];
+  mangaId: string;
+}
+
+export const MangaUI = ({ manga, volumes, mangaId }: MangaUIProps) => {
   const router = useRouter();
 
   const [isDeleting, setIsDeleting] = useState(false);
   const [deletePrompt, setDeletePrompt] = useState<DeletePrompt>(null);
-
-  const manga = useLiveQuery(() => db.mangas.get(params.id), [params.id]);
-  const volumes = useLiveQuery(
-    () => db.volumes.where('mangaId').equals(params.id).sortBy('title'),
-    [params.id]
-  );
 
   const executeDelete = async () => {
     if (!deletePrompt) return;
@@ -34,15 +33,15 @@ export default function MangaDetailPage() {
       if (deletePrompt.type === 'manga') {
         const vols = await db.volumes
           .where('mangaId')
-          .equals(params.id)
+          .equals(mangaId)
           .toArray();
         const volumeIds = vols.map((v) => v.id);
 
         if (volumeIds.length > 0) {
           await db.pages.where('volumeId').anyOf(volumeIds).delete();
         }
-        await db.volumes.where('mangaId').equals(params.id).delete();
-        await db.mangas.delete(params.id);
+        await db.volumes.where('mangaId').equals(mangaId).delete();
+        await db.mangas.delete(mangaId);
 
         router.push('/');
         return;
@@ -61,28 +60,9 @@ export default function MangaDetailPage() {
     }
   };
 
-  if (manga === undefined || volumes === undefined) {
-    return (
-      <div className="flex min-h-[100dvh] items-center justify-center bg-[#0a0a0a]">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-800 border-t-violet-500" />
-      </div>
-    );
-  }
-
-  if (manga === null) {
-    return (
-      <div className="flex min-h-[100dvh] flex-col items-center justify-center bg-[#0a0a0a] text-white">
-        <h1 className="mb-4 text-2xl font-bold">Manga not found</h1>
-        <Link href="/" className="text-violet-500 hover:underline">
-          Return to Library
-        </Link>
-      </div>
-    );
-  }
-
-  // Derive modal props based on current state to keep JSX clean
   const modalTitle =
     deletePrompt?.type === 'manga' ? 'Delete Entire Manga?' : 'Delete Volume?';
+
   const modalDesc =
     deletePrompt?.type === 'manga'
       ? 'This will permanently remove all volumes, pages, and cached translations for this manga from your device. You cannot undo this.'
@@ -141,7 +121,10 @@ export default function MangaDetailPage() {
           {volumes.map((volume) => (
             <Link
               key={volume.id}
-              href={`/reader/${volume.id}`}
+              href="/reader"
+              onClick={() => {
+                localStorage.setItem('activeVolumeId', volume.id);
+              }}
               className="group flex items-center justify-between rounded-md border border-white/5 bg-[#16181d] p-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-violet-500/30 hover:bg-[#1f2229] hover:shadow-lg hover:shadow-violet-900/10"
             >
               <span className="mr-4 truncate font-medium text-gray-300 transition-colors group-hover:text-violet-100">
@@ -192,4 +175,4 @@ export default function MangaDetailPage() {
       />
     </main>
   );
-}
+};

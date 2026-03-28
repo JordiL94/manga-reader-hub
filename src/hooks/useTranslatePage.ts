@@ -11,37 +11,52 @@ const fileToBase64 = (blob: Blob): Promise<string> => {
   });
 };
 
-// We now pass the pageId down to the fetcher
 async function fetchAndSaveTranslation(
   pageId: string,
   file: Blob,
   model: string
 ): Promise<TranslationBox[]> {
+  // 1. Check for Offline Status FIRST
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    throw new Error('ERR_OFFLINE');
+  }
+
+  // 2. Check for the API Key
   const apiKey = localStorage.getItem('geminiApiKey');
   if (!apiKey) {
-    throw new Error(
-      'API Key not found. Please save it in the Library settings.'
-    );
+    throw new Error('ERR_MISSING_KEY');
   }
 
   const base64String = await fileToBase64(file);
 
-  const response = await fetch('/api/translate', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    // Inject the apiKey here
-    body: JSON.stringify({ imageBase64: base64String, model, apiKey }),
-  });
+  try {
+    const response = await fetch('/api/translate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ imageBase64: base64String, model, apiKey }),
+    });
 
-  if (!response.ok) {
-    const errorData = (await response.json()) as { error?: string };
-    throw new Error(errorData.error || 'Failed to translate page');
+    if (!response.ok) {
+      // 3. Catch Gemini Overload / Rate Limits (429 Too Many Requests, 503 Service Unavailable)
+      if (response.status === 429 || response.status === 503) {
+        throw new Error('ERR_API_OVERLOADED');
+      }
+
+      const errorData = (await response.json()) as { error?: string };
+      throw new Error(errorData.error || 'ERR_UNKNOWN');
+    }
+
+    const data = (await response.json()) as { translations: TranslationBox[] };
+    await db.pages.update(pageId, { translations: data.translations });
+
+    return data.translations;
+  } catch (error: unknown) {
+    // If fetch fails entirely (e.g., DNS resolution fails while technically "online"), catch it
+    if (error instanceof Error && error.message === 'Failed to fetch') {
+      throw new Error('ERR_OFFLINE');
+    }
+    throw error;
   }
-
-  const data = (await response.json()) as { translations: TranslationBox[] };
-  await db.pages.update(pageId, { translations: data.translations });
-
-  return data.translations;
 }
 
 export function useTranslatePage(
@@ -52,21 +67,23 @@ export function useTranslatePage(
   isAutoTranslate: boolean = false
 ) {
   return useQuery({
-    // Cache key now uses pageId to ensure strict separation
     queryKey: ['translation', pageId, model],
-
     queryFn: () => {
-      if (!file || !pageId) throw new Error('Missing file or page ID');
+      if (!file || !pageId) throw new Error('ERR_MISSING_DATA');
       return fetchAndSaveTranslation(pageId, file, model);
     },
-
-    // TanStack will only automatically fetch if:
-    // 1. We have a file & ID
-    // 2. Auto-translate is turned on
-    // 3. The database doesn't already have translations for this page
     enabled: !!file && !!pageId && isAutoTranslate && !hasExistingTranslations,
-
     staleTime: Infinity,
     gcTime: Infinity,
+    // Prevents TanStack from retrying 3 times if we intentionally threw an offline/key error
+    retry: (failureCount, error) => {
+      if (
+        error.message === 'ERR_OFFLINE' ||
+        error.message === 'ERR_MISSING_KEY'
+      ) {
+        return false;
+      }
+      return failureCount < 2;
+    },
   });
 }

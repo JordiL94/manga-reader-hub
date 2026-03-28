@@ -99,7 +99,10 @@ export default function LibraryPage() {
           {mangas?.map((manga) => (
             <Link
               key={manga.id}
-              href={`/manga/${manga.id}`}
+              href="/manga"
+              onClick={() => {
+                localStorage.setItem('activeMangaId', manga.id);
+              }}
               className="group flex flex-col gap-3 outline-none"
             >
               <div className="relative aspect-[2/3] w-full overflow-hidden rounded-md bg-[#16181d] shadow-lg ring-1 ring-white/10 transition-all duration-300 group-hover:-translate-y-1 group-hover:shadow-xl group-hover:shadow-violet-900/20 group-hover:ring-violet-500/50 group-focus-visible:ring-violet-500">
