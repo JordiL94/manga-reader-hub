@@ -1,7 +1,7 @@
+'use client';
+
 import { Suspense } from 'react';
 import { ReaderContent } from './components/ReaderContent';
-
-export const dynamic = 'force-static';
 
 const VolumeReaderPage = () => {
   return (
