@@ -121,8 +121,10 @@ export const MangaUI = ({ manga, volumes, mangaId }: MangaUIProps) => {
           {volumes.map((volume) => (
             <Link
               key={volume.id}
-              /* UPDATED: Now points to the static query route for the reader */
-              href={`/reader?id=${volume.id}`}
+              href="/reader"
+              onClick={() => {
+                localStorage.setItem('activeVolumeId', volume.id);
+              }}
               className="group flex items-center justify-between rounded-md border border-white/5 bg-[#16181d] p-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-violet-500/30 hover:bg-[#1f2229] hover:shadow-lg hover:shadow-violet-900/10"
             >
               <span className="mr-4 truncate font-medium text-gray-300 transition-colors group-hover:text-violet-100">

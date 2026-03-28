@@ -30,7 +30,7 @@ export const ReaderUI = ({ volume, dbPages, initialPage }: ReaderUIProps) => {
   }));
 
   const handleClose = () => {
-    router.push(`/manga?id=${volume.mangaId}`);
+    router.push('/manga');
   };
 
   return (

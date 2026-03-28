@@ -1,16 +1,17 @@
 'use client';
 
-import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
 import { MangaUI } from './MangaUI';
 
 export const MangaContent = () => {
-  const searchParams = useSearchParams();
-  const id = searchParams.get('id');
+  // Direct, synchronous read. No extra renders needed!
+  const id =
+    typeof window !== 'undefined'
+      ? localStorage.getItem('activeMangaId')
+      : null;
 
-  // SAFE HOOKS: Only fire when ID is available
   const manga = useLiveQuery(() => (id ? db.mangas.get(id) : undefined), [id]);
 
   const volumes = useLiveQuery(

@@ -1,15 +1,16 @@
 'use client';
 
-import { useSearchParams } from 'next/navigation';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
 import { ReaderUI } from './ReaderUI';
 
 export const ReaderContent = () => {
-  const searchParams = useSearchParams();
-  const volumeId = searchParams.get('id');
+  // Direct, synchronous read.
+  const volumeId =
+    typeof window !== 'undefined'
+      ? localStorage.getItem('activeVolumeId')
+      : null;
 
-  // SAFE HOOKS: If volumeId is null, don't query Dexie yet
   const volume = useLiveQuery(
     () => (volumeId ? db.volumes.get(volumeId) : undefined),
     [volumeId]
