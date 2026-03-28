@@ -1,7 +1,7 @@
-'use client';
-
 import { Suspense } from 'react';
 import { MangaContent } from './components/MangaContent';
+
+export const dynamic = 'force-static';
 
 const MangaDetailPage = () => {
   return (
